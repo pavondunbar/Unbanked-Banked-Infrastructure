@@ -1,4 +1,4 @@
-# UNBANKED
+# UNBANKED/BANKED STABLECOIN INFRASTRUCTURE
 
 > **SANDBOX / EDUCATIONAL USE ONLY -- NOT FOR PRODUCTION**
 > This codebase is a reference implementation designed for learning, prototyping, and architectural exploration. It is **not audited, not legally reviewed, and must not be used to manage real funds, process real remittances, or interface with real mobile money or banking rails.** See the [Production Warning](#production-warning) section for full details.
@@ -892,4 +892,4 @@ This project is provided as-is for educational and reference purposes under the 
 
 ---
 
-*Built by Pavon Dunbar -- Cross-border stablecoin infrastructure for the unbanked*
+*Built with ❤️ by Pavon Dunbar -- Cross-border stablecoin infrastructure for the unbanked*
