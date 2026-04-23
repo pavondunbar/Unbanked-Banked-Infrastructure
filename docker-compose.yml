@@ -1,0 +1,191 @@
+# ============================================================
+# UNBANKED: Cross-Border Stablecoin Infrastructure
+# Trust Boundaries: dmz (public) | internal | signing (isolated)
+# ============================================================
+
+networks:
+  dmz:
+    driver: bridge
+  internal:
+    driver: bridge
+    internal: true
+  signing:
+    driver: bridge
+    internal: true
+
+x-shared-env: &shared-env
+  DATABASE_URL: postgresql://unbanked:unbanked@postgres:5432/unbanked
+  KAFKA_BOOTSTRAP: kafka:9092
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  volumes:
+    - ./shared:/app/shared:ro
+
+services:
+  # ── Infrastructure ──────────────────────────────────────
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: unbanked
+      POSTGRES_USER: unbanked
+      POSTGRES_PASSWORD: unbanked
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init/postgres:/docker-entrypoint-initdb.d:ro
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unbanked"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:3.9.0
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      CLUSTER_ID: "dGVzdC1jbHVzdGVyLTAwMQ"
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # ── API Gateway (only service exposed to host) ──────────
+
+  api-gateway:
+    <<: *service-defaults
+    build: ./services/api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *shared-env
+      SERVICE_NAME: api-gateway
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    networks: [dmz, internal]
+
+  # ── Core Services (internal network only) ───────────────
+
+  transfer-engine:
+    <<: *service-defaults
+    build: ./services/transfer-engine
+    environment:
+      <<: *shared-env
+      SERVICE_NAME: transfer-engine
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [internal]
+
+  settlement:
+    <<: *service-defaults
+    build: ./services/settlement
+    environment:
+      <<: *shared-env
+      SERVICE_NAME: settlement
+      SIGNING_GATEWAY_URL: http://signing-gateway:8005
+    depends_on:
+      postgres: { condition: service_healthy }
+      signing-gateway: { condition: service_started }
+    networks: [internal, signing]
+
+  fx-engine:
+    <<: *service-defaults
+    build: ./services/fx-engine
+    environment:
+      <<: *shared-env
+      SERVICE_NAME: fx-engine
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [internal]
+
+  compliance:
+    <<: *service-defaults
+    build: ./services/compliance
+    environment:
+      <<: *shared-env
+      SERVICE_NAME: compliance
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    networks: [internal]
+
+  outbox-publisher:
+    <<: *service-defaults
+    build: ./services/outbox-publisher
+    environment:
+      <<: *shared-env
+      SERVICE_NAME: outbox-publisher
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+    networks: [internal]
+
+  reconciliation:
+    <<: *service-defaults
+    build: ./services/reconciliation
+    environment:
+      <<: *shared-env
+      SERVICE_NAME: reconciliation
+    depends_on:
+      postgres: { condition: service_healthy }
+    networks: [internal]
+
+  # ── Signing Infrastructure (isolated network) ───────────
+
+  signing-gateway:
+    <<: *service-defaults
+    build: ./services/signing-gateway
+    environment:
+      MPC_NODES: "http://mpc-node-1:8010,http://mpc-node-2:8010,http://mpc-node-3:8010"
+      MPC_THRESHOLD: "2"
+      SERVICE_NAME: signing-gateway
+    depends_on:
+      - mpc-node-1
+      - mpc-node-2
+      - mpc-node-3
+    networks: [signing]
+
+  mpc-node-1:
+    <<: *service-defaults
+    build: ./services/mpc-node
+    environment:
+      NODE_ID: "mpc-node-1"
+      NODE_INDEX: "0"
+    networks: [signing]
+
+  mpc-node-2:
+    <<: *service-defaults
+    build: ./services/mpc-node
+    environment:
+      NODE_ID: "mpc-node-2"
+      NODE_INDEX: "1"
+    networks: [signing]
+
+  mpc-node-3:
+    <<: *service-defaults
+    build: ./services/mpc-node
+    environment:
+      NODE_ID: "mpc-node-3"
+      NODE_INDEX: "2"
+    networks: [signing]
+
+volumes:
+  pgdata:

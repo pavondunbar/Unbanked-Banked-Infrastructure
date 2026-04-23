@@ -1,0 +1,12 @@
+[project]
+name = "unbanked"
+version = "0.1.0"
+description = "Cross-border stablecoin transfer infrastructure for unbanked clients"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.28.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
