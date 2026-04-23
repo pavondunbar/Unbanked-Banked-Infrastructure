@@ -1,5 +1,7 @@
 # UNBANKED/BANKED STABLECOIN INFRASTRUCTURE
 
+<img width="1616" height="973" alt="unbanked" src="https://github.com/user-attachments/assets/a149aa01-a453-464a-9c8c-8a1e14b25230" />
+
 > **SANDBOX / EDUCATIONAL USE ONLY -- NOT FOR PRODUCTION**
 > This codebase is a reference implementation designed for learning, prototyping, and architectural exploration. It is **not audited, not legally reviewed, and must not be used to manage real funds, process real remittances, or interface with real mobile money or banking rails.** See the [Production Warning](#production-warning) section for full details.
 
